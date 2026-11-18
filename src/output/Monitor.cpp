@@ -798,6 +798,11 @@ bool CMonitor::applyMonitorRule(Config::CMonitorRule&& pMonitorRule) {
     const auto OLDTRANSFORMEDSIZE = m_transformedSize;
     bool       success            = false;
 
+    const auto OLDMODE          = m_output->state->state().mode.lock();
+    const auto OLDCUSTOMMODE    = m_output->state->state().customMode;
+    const auto OLDCURRENTMODE   = m_currentMode;
+    const auto OLDCUSTOMDRMMODE = m_customDrmMode;
+
     // Needed in case we are switching from a custom modeline to a standard mode
     m_customDrmMode = {};
     m_currentMode   = nullptr;
@@ -906,6 +911,15 @@ bool CMonitor::applyMonitorRule(Config::CMonitorRule&& pMonitorRule) {
     }
 
     if (!success) {
+        // every test left its mode and swapchain size behind; go back to the last mode that worked so
+        // the next commit doesn't modeset to the last rejected fallback while m_pixelSize keeps the old size
+        if (OLDCUSTOMMODE)
+            m_state.applyCustomModeWithSwapchain(OLDCUSTOMMODE);
+        else if (OLDMODE)
+            m_state.applyModeWithSwapchain(OLDMODE);
+        m_currentMode   = OLDCURRENTMODE;
+        m_customDrmMode = OLDCUSTOMDRMMODE;
+
         m_activeMonitorRule = std::move(pMonitorRule);
         LOG(Log::ERR, "Monitor {} has NO FALLBACK MODES, and an INVALID one was requested: {:X0}@{:.2f}Hz", m_name, RULE->m_resolution, RULE->m_refreshRate);
         scheduleModeRetry();
